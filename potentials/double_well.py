@@ -66,3 +66,14 @@ class DoubleWellPotential:
 
         if show:
             plt.show()
+
+# Example usage
+if __name__ == "__main__":
+    potential = DoubleWellPotential(a=1.0, b=1.0)
+    potential.plot()
+
+    samples = potential.metropolis_sample(n_samples=1000, step_size=0.5)
+    plt.hist(samples, bins=30, density=True, alpha=0.5, label='Sampled Distribution')
+    potential.plot(show=False, ax=plt.gca(), label='Potential')
+    plt.legend()
+    plt.show()
