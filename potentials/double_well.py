@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 
 class DoubleWellPotential:
     def __init__(self, a=1.0, b=1.0):
@@ -14,6 +15,9 @@ class DoubleWellPotential:
         """
         Evaluate the potential energy U(x).
         """
+        if x.ndim == 2 and x.shape[1] == 1:
+            x = x.squeeze(1)
+        
         return self.a * (x**2 - self.b)**2
 
     def grad(self, x):
@@ -22,30 +26,41 @@ class DoubleWellPotential:
         dU/dx = 4a * x * (x^2 - b)
         """
         return 4 * self.a * x * (x**2 - self.b)
-
-    def metropolis_sample(self, n_samples=1000, step_size=0.5, burn_in=100, x0=None):
+    
+    def metropolis_sample(
+        self,
+        n_samples: int = 5000,
+        step_size: float = 0.1,
+        burn_in: int = 100,
+        device: str = "cpu",
+        seed: int = 42
+    ) -> np.ndarray:
         """
-        Simple Metropolis-Hastings sampler.
+        Metropolis-Hastings sampler for N-particle 3D system.
+        Returns:
+            samples: np.ndarray of shape (n_samples, n_particles, 3)
         """
-        if x0 is None:
-            x = np.random.randn()
-        else:
-            x = x0
+        torch.manual_seed(seed)
+        np.random.seed(seed)
 
+        x = torch.randn(1, 1, device=device)  # Initial configuration
         samples = []
+
         accepted = 0
-
         for i in range(n_samples + burn_in):
-            x_prop = x + np.random.normal(scale=step_size)
+            x_prop = x + step_size * torch.randn_like(x)
             dE = self.energy(x_prop) - self.energy(x)
-            if dE < 0 or np.random.rand() < np.exp(-dE):
-                x = x_prop
-                accepted += 1
-            if i >= burn_in:
-                samples.append(x)
 
-        print(f"Acceptance rate: {accepted / (n_samples + burn_in):.2f}")
-        return np.array(samples)
+            accept = torch.rand(1, device=device) < torch.exp(-dE)
+            x = torch.where(accept.view(-1, 1), x_prop, x)
+
+            if i >= burn_in:
+                samples.append(x.detach().cpu().view(1).numpy())
+                accepted += int(accept.item())
+
+        print(f"Acceptance rate: {accepted / n_samples:.2f}")
+        print(f"Samples shape: {np.stack(samples, axis=0).shape}")
+        return np.stack(samples, axis=0)
     
     def plot(self, x_range=(-3, 3), num_points=300, show=True, ax=None, label=None):
         """
@@ -66,14 +81,3 @@ class DoubleWellPotential:
 
         if show:
             plt.show()
-
-# Example usage
-if __name__ == "__main__":
-    potential = DoubleWellPotential(a=1.0, b=1.0)
-    potential.plot()
-
-    samples = potential.metropolis_sample(n_samples=1000, step_size=0.5)
-    plt.hist(samples, bins=30, density=True, alpha=0.5, label='Sampled Distribution')
-    potential.plot(show=False, ax=plt.gca(), label='Potential')
-    plt.legend()
-    plt.show()

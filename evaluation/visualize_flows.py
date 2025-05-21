@@ -3,7 +3,7 @@ import torch
 import matplotlib.pyplot as plt
 from typing import Callable
 from models.realnvp import RealNVP
-
+from sklearn.decomposition import PCA
 
 @torch.no_grad()
 def visualize_flow_mapping(
@@ -21,12 +21,16 @@ def visualize_flow_mapping(
     """
     x_A = np.load(samples_A_path).astype(np.float32)
     x_B = np.load(samples_B_path).astype(np.float32)
-    x_A_tensor = torch.from_numpy(x_A).unsqueeze(1).to(device)
+
+    print(f"x_A.shape: {x_A.shape}")
+    print(f"x_B.shape: {x_B.shape}")
+    x_A_tensor = torch.from_numpy(x_A)
 
     model.eval()
     model = model.to(device)
     z_mapped, _ = model(x_A_tensor)
     z_mapped = z_mapped.cpu().numpy().squeeze()
+    print(f"z_mapped.shape: {z_mapped.shape}")
 
     fig, ax1 = plt.subplots(figsize=(8, 5))
 
@@ -52,6 +56,66 @@ def visualize_flow_mapping(
         plt.show()
 
 @torch.no_grad()
+def visualize_pca_mapped_vs_target(
+    model: RealNVP,
+    samples_A_path: str,
+    samples_B_path: str,
+    device: str = "cpu",
+    out_path: str = None,
+    n_points: int = 2000,
+) -> None:
+    """
+    Perform PCA and plot:
+    - Original A samples
+    - Mapped samples from A → B
+    - True samples from B
+    """
+    # Load and flatten
+    x_A = np.load(samples_A_path).astype(np.float32)
+    x_B = np.load(samples_B_path).astype(np.float32)
+
+    if x_A.ndim == 3: x_A = x_A.reshape(x_A.shape[0], -1)
+    if x_B.ndim == 3: x_B = x_B.reshape(x_B.shape[0], -1)
+
+    x_A = x_A[:n_points]
+    x_B = x_B[:n_points]
+
+    x_A_tensor = torch.from_numpy(x_A).to(device)
+
+    # Apply flow: A → B
+    model.eval()
+    model = model.to(device)
+    z_mapped, _ = model(x_A_tensor)
+    z_mapped = z_mapped.cpu().numpy()
+
+    # Combine and PCA
+    all_data = np.vstack([x_A, z_mapped, x_B])
+    pca = PCA(n_components=2)
+    reduced = pca.fit_transform(all_data)
+
+    reduced_A      = reduced[:n_points]
+    reduced_mapped = reduced[n_points:2*n_points]
+    reduced_B      = reduced[2*n_points:]
+
+    # Plot
+    plt.figure(figsize=(8, 6))
+    plt.scatter(reduced_A[:, 0], reduced_A[:, 1], alpha=0.4, label="State A (original)")
+    plt.scatter(reduced_mapped[:, 0], reduced_mapped[:, 1], alpha=0.4, label="Mapped A → B")
+    plt.scatter(reduced_B[:, 0], reduced_B[:, 1], alpha=0.4, label="State B (true)")
+
+    plt.xlabel("PCA 1")
+    plt.ylabel("PCA 2")
+    plt.title("PCA Projection: A, A→B (mapped), B")
+    plt.legend()
+
+    if out_path:
+        plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        print(f"Saved PCA plot to {out_path}")
+    else:
+        plt.show()
+
+
+@torch.no_grad()
 def visualize_inverse_flow_mapping(
     model: RealNVP,
     samples_A_path: str,
@@ -67,7 +131,7 @@ def visualize_inverse_flow_mapping(
     """
     x_A = np.load(samples_A_path).astype(np.float32)
     x_B = np.load(samples_B_path).astype(np.float32)
-    x_B_tensor = torch.from_numpy(x_B).unsqueeze(1).to(device)
+    x_B_tensor = torch.from_numpy(x_B)
 
     model.eval()
     model = model.to(device)
@@ -98,18 +162,61 @@ def visualize_inverse_flow_mapping(
         plt.show()
 
 
-# if __name__ == "__main__":
-#     model = RealNVP(n_coupling_layers=4, hidden_dim=64)
-#     model.load_state_dict(torch.load("realnvp_trained.pt", map_location="cpu"))
+@torch.no_grad()
+def visualize_pca_inverse_mapping(
+    model: RealNVP,
+    samples_A_path: str,
+    samples_B_path: str,
+    device: str = "cpu",
+    out_path: str = None,
+    n_points: int = 2000,
+) -> None:
+    """
+    Perform PCA and plot:
+    - State B samples (true)
+    - Mapped samples from B → A via inverse flow
+    - State A samples (true)
+    """
+    # Load and flatten
+    x_A = np.load(samples_A_path).astype(np.float32)
+    x_B = np.load(samples_B_path).astype(np.float32)
 
-#     visualize_flow_mapping(
-#         model=model,
-#         samples_A_path="data/state_a_samples.npy",
-#         samples_B_path="data/state_b_samples.npy"
-#     )
+    if x_A.ndim == 3: x_A = x_A.reshape(x_A.shape[0], -1)
+    if x_B.ndim == 3: x_B = x_B.reshape(x_B.shape[0], -1)
 
-#     visualize_inverse_flow_mapping(
-#         model=model,
-#         samples_A_path="data/state_a_samples.npy",
-#         samples_B_path="data/state_b_samples.npy",
-#     )
+    x_A = x_A[:n_points]
+    x_B = x_B[:n_points]
+
+    x_B_tensor = torch.from_numpy(x_B).to(device)
+
+    # Apply inverse flow: B → A
+    model.eval()
+    model = model.to(device)
+    x_mapped, _ = model.inverse(x_B_tensor)
+    x_mapped = x_mapped.cpu().numpy()
+
+    # Combine and PCA
+    all_data = np.vstack([x_B, x_mapped, x_A])
+    pca = PCA(n_components=2)
+    reduced = pca.fit_transform(all_data)
+
+    reduced_B      = reduced[:n_points]
+    reduced_mapped = reduced[n_points:2*n_points]
+    reduced_A      = reduced[2*n_points:]
+
+    # Plot
+    plt.figure(figsize=(8, 6))
+    plt.scatter(reduced_B[:, 0], reduced_B[:, 1], alpha=0.4, label="State B (true)")
+    plt.scatter(reduced_mapped[:, 0], reduced_mapped[:, 1], alpha=0.4, label="Mapped B → A")
+    plt.scatter(reduced_A[:, 0], reduced_A[:, 1], alpha=0.4, label="State A (true)")
+
+    plt.xlabel("PCA 1")
+    plt.ylabel("PCA 2")
+    plt.title("PCA Projection: B, B→A (mapped), A")
+    plt.legend()
+
+    if out_path:
+        plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        print(f"Saved inverse PCA plot to {out_path}")
+    else:
+        plt.show()

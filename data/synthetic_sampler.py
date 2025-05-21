@@ -2,9 +2,11 @@ import os
 import argparse
 import numpy as np
 from typing import Tuple
+import json
 
 # Import available potentials
 from potentials.double_well import DoubleWellPotential
+from potentials.lj import LennardJonesPotential
 # from potentials.muller_brown import MullerBrownPotential  # Add when implemented
 
 
@@ -17,6 +19,10 @@ def get_potential(name: str, dim: int = 1, **kwargs):
         if dim != 1:
             raise NotImplementedError("Double well currently only supports 1D.")
         return DoubleWellPotential(**kwargs)
+    elif name == "lj":
+        if dim % 3 != 0:
+            raise NotImplementedError("Lennard-Jones potential currently only supports 3D.")
+        return LennardJonesPotential(**kwargs)
     
     # elif name == "muller_brown":
     #     return MullerBrownPotential(dim=dim, **kwargs)
@@ -56,30 +62,7 @@ def run_sampling(
     Full pipeline to construct a potential, sample from it, and save results.
     """
     potential = get_potential(potential_name, dim=dim, **potential_kwargs)
+
+    print(f"Sampling {n_samples} samples from {potential_name} potential with parameters: {potential_kwargs}")
     samples = generate_dataset(potential, n_samples=n_samples, seed=seed, method=method)
     save_dataset(samples, filename=out_file)
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Synthetic dataset sampler")
-    parser.add_argument("--potential", type=str, required=True, help="Name of the potential (e.g., double_well)")
-    parser.add_argument("--dim", type=int, default=1, help="Dimensionality of system")
-    parser.add_argument("--n_samples", type=int, default=5000, help="Number of samples to generate")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--output", type=str, required=True, help="Output .npy filename")
-    parser.add_argument("--method", type=str, default="metropolis", help="Sampling method")
-    parser.add_argument("--potential_kwargs", type=str, default="{}", help="Extra kwargs for potential as JSON string")
-
-    args = parser.parse_args()
-
-    import json
-    kwargs = json.loads(args.potential_kwargs)
-
-    run_sampling(
-        potential_name=args.potential,
-        potential_kwargs=kwargs,
-        n_samples=args.n_samples,
-        seed=args.seed,
-        dim=args.dim,
-        out_file=args.output,
-        method=args.method,
-    )
