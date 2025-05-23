@@ -27,21 +27,58 @@ class DoubleWellPotential:
         """
         return 4 * self.a * x * (x**2 - self.b)
     
+    def langevin_sample(
+        self,
+        n_samples=5000,
+        step_size=0.01,
+        n_steps=100,
+        burn_in=100,
+        n_chains=10,         # Number of parallel chains
+        seed=None
+    ):
+        """
+        Parallel Unadjusted Langevin Dynamics (ULA) sampling.
+        Returns: numpy array of shape (n_samples * n_chains, 1)
+        """
+        import torch
+
+        if seed is not None:
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+
+        x = torch.randn((n_chains, 1), dtype=torch.float32, requires_grad=True)
+        samples = []
+
+        optimizer = torch.optim.SGD([x], lr=step_size)
+
+        total_steps = n_steps + n_samples + burn_in
+        for step in range(total_steps):
+            optimizer.zero_grad()
+            u = self.energy(x).sum()  # Sum over chains
+            u.backward()
+
+            with torch.no_grad():
+                noise = torch.randn_like(x)
+                x -= 0.5 * step_size * x.grad
+                x += (step_size ** 0.5) * noise
+                x.grad.zero_()
+
+                if step >= n_steps + burn_in:
+                    samples.append(x.detach().clone())  # shape: (n_chains, 1)
+
+        return torch.cat(samples, dim=0).numpy()  # shape: (n_samples * n_chains, 1)
+
     def metropolis_sample(
         self,
         n_samples: int = 5000,
         step_size: float = 0.1,
         burn_in: int = 100,
         device: str = "cpu",
-        seed: int = 42
+        seed: int = None,
     ) -> np.ndarray:
-        """
-        Metropolis-Hastings sampler for N-particle 3D system.
-        Returns:
-            samples: np.ndarray of shape (n_samples, n_particles, 3)
-        """
-        torch.manual_seed(seed)
-        np.random.seed(seed)
+        if seed is not None:
+            torch.manual_seed(seed)
+            np.random.seed(seed)
 
         x = torch.randn(1, 1, device=device)  # Initial configuration
         samples = []
