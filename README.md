@@ -8,9 +8,7 @@ This project estimates free energy differences (ΔF) between thermodynamic state
 
 - Learn a bijective mapping between state A and state B
 - Estimate ΔF via:
-  $$
-  \Delta F = \mathbb{E}_{x \sim p_A} \left[ U_B(f(x)) - \log |\det J_f(x)| \right]
-  $$
+  $$\Delta F = \mathbb{E}_{x \sim p_A} \left[ U_B(f(x)) - \log |\det J_f(x)| \right]$$
 - Train flows in both directions (A → B and B → A)
 - Evaluate overlap using PCA, energy histograms, and KL/Wasserstein metrics
 - Compare ΔF estimates to ground truth (1D double well) or MBAR (Lennard-Jones)
