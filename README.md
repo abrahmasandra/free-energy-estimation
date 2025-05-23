@@ -44,12 +44,6 @@ ml_free_energy_estimation/
 
 ## 🧪 Setup
 
-**Dependencies (via `requirements.txt`)**:
-- `numpy`
-- `torch`
-- `matplotlib`
-- `seaborn` (optional for multi-d plots)
-
 Install:
 
 ```bash
